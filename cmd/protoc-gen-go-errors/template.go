@@ -7,7 +7,7 @@ import (
 
 var errorsMap = `
 var (
-	errorsMap   map[string]string
+	errorsEnMap map[string]string
 	errorsChMap map[string]string
 	once        sync.Once
 	onceCh      sync.Once
@@ -30,17 +30,26 @@ func ch(in string) (out string) {
 
 func en(in string) (out string) {
 	once.Do(func() {
-		errorsMap = map[string]string{
+		errorsEnMap = map[string]string{
 		{{ range .Errors }}
 			{{.Name}}_{{.Value}}.String(): "{{.Reason}}",
 		{{- end }}
 		}
 	})
 	out = in
-	if r := errorsMap[in]; len(r) > 0 {
+	if r := errorsEnMap[in]; len(r) > 0 {
 		out = r
 	}
 	return
+}
+
+func convert(ctx context.Context, s string) string {
+	if lang, ok := errorctx.FromErrorsContext(ctx); ok {
+		if strings.EqualFold(lang, "ch") {
+			return ch(s)
+		}
+	}
+	return en(s)
 }
 `
 var errorsTemplate = `
@@ -52,14 +61,7 @@ func Is{{.CamelValue}}(err error) bool {
 }
 
 func Error{{.CamelValue}}(ctx context.Context, format string, args ...interface{}) *errors.Error {
-  	reason := {{.Name}}_{{.Value}}.String()
-	if lang, ok := errorctx.FromErrorsContext(ctx); ok {
-		if strings.EqualFold(lang, "ch") {
-			reason = ch(reason)
-		} else {
-			reason = en(reason)
-		}
-	}
+  	reason := convert(ctx, {{.Name}}_{{.Value}}.String())
 	return errors.New({{.HTTPCode}}, reason, fmt.Sprintf(format, args...))
 }
 
